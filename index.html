@@ -339,6 +339,12 @@
           -->
           <form id="signup-form" class="signup-form" data-endpoint="https://formspree.io/f/mbdnbyya">
             <input type="email" name="email" placeholder="you@example.com" required aria-label="Email address" />
+            <!-- Honeypot: invisible to real visitors, but bots that fill in
+                 every field trip it — Formspree silently discards the
+                 submission if this arrives non-empty. Free on every plan,
+                 on top of the reCAPTCHA-style detection Formspree already
+                 runs automatically on all submissions. -->
+            <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" style="position:absolute; left:-9999px;" aria-hidden="true" />
             <button type="submit" class="btn">Get Free Revision Tips</button>
           </form>
           <p class="form-note">No spam. Unsubscribe anytime.</p>
