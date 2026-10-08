@@ -1,0 +1,273 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>UpperGrades Intro</title>
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; height: 100vh; margin: 0 auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// UpperGrades ribbon intro — portrait 1080x1920, 60fps, 2.5s.
+// Geometry is traced from the logo PNG in index.html (160x115 coordinate space).
+const W = 1080, H = 1920, FPS = 60, DURATION = 2.5;
+const FRAMES = Math.round(FPS * DURATION);
+const SCALE = 4.8;                 // logo units -> pixels
+const CX = 79, CY = 57;            // logo centre in logo units
+const RIBBON_W = 21.5;             // ribbon width in logo units
+
+const TEAL = '#53A7B2', TEAL_DARK = '#24616C';
+const ORANGE = '#F5911F', ORANGE_DARK = '#9A5C0E';
+
+// ---- path building -------------------------------------------------------
+const P = (x, y) => ({ x, y });
+function line(a, b) { return t => P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t); }
+function arc(c, r, a0, a1) {
+  const d = Math.PI / 180;
+  return t => { const a = (a0 + (a1 - a0) * t) * d; return P(c.x + r * Math.cos(a), c.y + r * Math.sin(a)); };
+}
+function cubic(p0, p1, p2, p3) {
+  return t => {
+    const u = 1 - t;
+    return P(u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x,
+             u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y);
+  };
+}
+
+// Sample a list of segment functions into an arc-length parameterised polyline.
+function buildPath(segs) {
+  const pts = [];
+  for (const f of segs) {
+    const n = 400;
+    for (let i = pts.length ? 1 : 0; i <= n; i++) pts.push(f(i / n));
+  }
+  const len = [0];
+  for (let i = 1; i < pts.length; i++)
+    len.push(len[i-1] + Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y));
+  return { pts, len, total: len[len.length - 1] };
+}
+function lengthOf(segs) { return buildPath(segs).total; }
+
+// Point + unit tangent at arc length s (clamped).
+function at(path, s) {
+  const { pts, len } = path;
+  s = Math.max(0, Math.min(path.total, s));
+  let lo = 0, hi = len.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (len[m] <= s) lo = m; else hi = m; }
+  const seg = len[hi] - len[lo] || 1e-9, k = (s - len[lo]) / seg;
+  const a = pts[lo], b = pts[hi];
+  const dx = b.x - a.x, dy = b.y - a.y, dl = Math.hypot(dx, dy) || 1e-9;
+  return { x: a.x + dx * k, y: a.y + dy * k, tx: dx / dl, ty: dy / dl };
+}
+
+// Ribbon = [offscreen run-up] + leadIn + logo + leadOut + [offscreen run-out].
+// The visible ribbon is always exactly as long as the logo segment, so it
+// slides along the track: in from off-screen, rests on the logo, then away.
+function makeRibbon({ leadIn, logo, leadOut, color, dark, shade, arrow }) {
+  const logoLen = lengthOf(logo);
+  const tmp = buildPath([...leadIn, ...logo, ...leadOut]);
+  const first = at(tmp, 0.01), last = at(tmp, tmp.total - 0.01);
+  const ext = logoLen + 120;
+  const runUp = line(P(tmp.pts[0].x - first.tx * ext, tmp.pts[0].y - first.ty * ext), tmp.pts[0]);
+  const end = tmp.pts[tmp.pts.length - 1];
+  const runOut = line(end, P(end.x + last.tx * ext, end.y + last.ty * ext));
+  const path = buildPath([runUp, ...leadIn, ...logo, ...leadOut, runOut]);
+  const sStart = ext;                               // head at start of leadIn
+  const sRest = ext + lengthOf(leadIn) + logoLen;   // head at end of logo
+  const sEnd = path.total;                          // tail at end of track
+  return { path, logoLen, sStart, sRest, sEnd, color, dark, shade, arrow };
+}
+
+// ---- the two ribbons (logo units) -----------------------------------------
+const tealLogo = [
+  line(P(16, 6), P(16, 69)),                 // U left stem
+  arc(P(43, 69), 27, 180, 0),                // U bottom
+  line(P(70, 69), P(70, 58)),                // U right stem
+  arc(P(110, 58), 40, 180, 308),             // G top arc
+];
+const tealEnd = arc(P(110, 58), 40, 180, 308)(1);
+const teal = makeRibbon({
+  leadIn: [cubic(P(-150, -190), P(-40, -230), P(16, -130), P(16, 6))],
+  logo: tealLogo,
+  leadOut: [cubic(tealEnd, P(tealEnd.x + 22, tealEnd.y + 22), P(205, 30), P(300, -150))],
+  color: TEAL, dark: TEAL_DARK,
+  // dark edge bands as [startRel, peakRel, endRel, strength] measured from logo start
+  shade: [[30, 95, 150, 0.9], [140, 162, 195, 0.7]],
+  arrow: false,
+});
+
+const orangeLogo = [
+  arc(P(100.6, 67), 30.4, 180, 0),           // G bottom bowl (starts tucked under the U)
+  line(P(131, 67), P(131, 64)),              // G right stem up to arrow
+];
+const orange = makeRibbon({
+  leadIn: [cubic(P(-110, 330), P(-60, 120), P(70.2, -40), P(70.2, 67))],
+  logo: orangeLogo,
+  leadOut: [line(P(131, 64), P(131, -260))],
+  color: ORANGE, dark: ORANGE_DARK,
+  shade: [[-10, 20, 60, 1.0]],
+  arrow: { len: 25, half: 20.5 },
+});
+
+// ---- timing ---------------------------------------------------------------
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeIn = t => t * t * t;
+const easeInOutOut = t => t < 0 ? 0 : t > 1 ? 1 : 1 - Math.pow(1 - t, 4);
+const clamp01 = t => Math.max(0, Math.min(1, t));
+
+// IN: 0 -> 1.0s, HOLD: 1.0 -> 1.5s (still), OUT: 1.5 -> ~2.4s.
+function headPos(r, t, delay) {
+  const inStart = 0.0 + delay, inEnd = 1.0;
+  const outStart = 1.5 + delay, outEnd = 2.38 + delay * 0.5;
+  if (t < outStart) {
+    const k = easeInOutOut((t - inStart) / (inEnd - inStart));
+    return r.sStart + (r.sRest - r.sStart) * k;
+  }
+  const k = easeIn(clamp01((t - outStart) / (outEnd - outStart)));
+  return r.sRest + (r.sEnd - r.sRest) * k;
+}
+
+// ---- drawing --------------------------------------------------------------
+const toPx = p => P((p.x - CX) * SCALE + W / 2, (p.y - CY) * SCALE + H / 2);
+
+function smoothBump(a, p, b, x) {
+  if (x <= a || x >= b) return 0;
+  const k = x < p ? (x - a) / (p - a) : (b - x) / (b - p);
+  return k * k * (3 - 2 * k);
+}
+
+function drawRibbon(ctx, r, head) {
+  const tail = head - r.logoLen;
+  const s0 = Math.max(0, tail), s1 = Math.min(r.path.total, head);
+  if (s1 <= s0) return;
+  const step = 0.4;
+
+  // base stroke
+  ctx.save();
+  ctx.lineWidth = RIBBON_W * SCALE;
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = r.color;
+  ctx.beginPath();
+  for (let s = s0; ; s += step) {
+    const q = toPx(at(r.path, Math.min(s, s1)));
+    if (s === s0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
+    if (s >= s1) break;
+  }
+  ctx.stroke();
+
+  // arrowhead riding on the head of the ribbon
+  if (r.arrow) {
+    const h = at(r.path, head), nx = -h.ty, ny = h.tx;
+    const a = toPx(P(h.x + nx * r.arrow.half, h.y + ny * r.arrow.half));
+    const b = toPx(P(h.x - nx * r.arrow.half, h.y - ny * r.arrow.half));
+    const tip = toPx(P(h.x + h.tx * r.arrow.len, h.y + h.ty * r.arrow.len));
+    const back = toPx(P(h.x - h.tx * 0.6, h.y - h.ty * 0.6));
+    ctx.fillStyle = r.color;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y); ctx.lineTo(tip.x, tip.y); ctx.lineTo(b.x, b.y);
+    ctx.lineTo(back.x, back.y); ctx.closePath(); ctx.fill();
+  }
+
+  ctx.restore();
+
+  // shading: soft dark band along one edge, travelling with the ribbon.
+  // Dabs go on their own canvas, blurred once, then painted atop the ribbon.
+  shadeCtx.clearRect(0, 0, W, H);
+  shadeCtx.fillStyle = r.dark;
+  for (const [a, p, b, strength] of r.shade) {
+    for (let rel = a; rel <= b; rel += 0.8) {
+      const s = tail + rel;
+      if (s < s0 || s > s1) continue;
+      const w = smoothBump(a, p, b, rel) * strength;
+      if (w <= 0) continue;
+      const q = at(r.path, s), nx = -q.ty, ny = q.tx;
+      const edge = RIBBON_W / 2;
+      const c = toPx(P(q.x + nx * edge, q.y + ny * edge));
+      shadeCtx.beginPath();
+      shadeCtx.arc(c.x, c.y, w * RIBBON_W * 0.55 * SCALE, 0, Math.PI * 2);
+      shadeCtx.fill();
+    }
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.filter = `blur(${(2.2 * SCALE).toFixed(1)}px)`;
+  ctx.drawImage(shade, 0, 0);
+  ctx.restore();
+}
+
+const shade = document.createElement('canvas');
+shade.width = W; shade.height = H;
+const shadeCtx = shade.getContext('2d');
+
+const layer = document.createElement('canvas');
+layer.width = W; layer.height = H;
+const lctx = layer.getContext('2d');
+
+function drawScene(ctx, t) {
+  ctx.clearRect(0, 0, W, H);
+  // orange underneath, teal on top (the U passes over the G bowl)
+  for (const [r, delay] of [[orange, 0.07], [teal, 0]]) {
+    lctx.clearRect(0, 0, W, H);
+    drawRibbon(lctx, r, headPos(r, t, delay));
+    ctx.drawImage(layer, 0, 0);
+  }
+}
+
+// Motion-blurred frame: average several sub-frame renders (180° shutter),
+// accumulating premultiplied colour so the alpha channel stays correct.
+const sub = document.createElement('canvas');
+sub.width = W; sub.height = H;
+const sctx = sub.getContext('2d', { willReadFrequently: true });
+const out = document.getElementById('c');
+const octx = out.getContext('2d');
+const SAMPLES = 6;
+
+function renderFrame(i, samples = SAMPLES) {
+  const t0 = i / FPS, shutter = 0.5 / FPS;
+  const acc = new Float32Array(W * H * 4);
+  for (let k = 0; k < samples; k++) {
+    const t = t0 + (samples > 1 ? (k / (samples - 1) - 0.5) * shutter : 0);
+    drawScene(sctx, t);
+    const d = sctx.getImageData(0, 0, W, H).data;
+    for (let j = 0; j < d.length; j += 4) {
+      const a = d[j + 3];
+      if (!a) continue;
+      acc[j] += d[j] * a; acc[j + 1] += d[j + 1] * a; acc[j + 2] += d[j + 2] * a; acc[j + 3] += a;
+    }
+  }
+  const img = octx.createImageData(W, H), o = img.data;
+  for (let j = 0; j < o.length; j += 4) {
+    const a = acc[j + 3];
+    if (!a) continue;
+    o[j] = acc[j] / a; o[j + 1] = acc[j + 1] / a; o[j + 2] = acc[j + 2] / a;
+    o[j + 3] = a / samples;
+  }
+  octx.putImageData(img, 0, 0);
+  return out.toDataURL('image/png');
+}
+
+window.FRAMES = FRAMES;
+window.FPS = FPS;
+window.renderFrame = renderFrame;
+
+// Live preview when opened directly in a browser (?still=<seconds> for one frame).
+if (!navigator.webdriver) {
+  const still = new URLSearchParams(location.search).get('still');
+  if (still !== null) { drawScene(octx, parseFloat(still)); }
+  else {
+    let start = performance.now();
+    (function loop(now) {
+      let t = (now - start) / 1000;
+      if (t > DURATION + 0.6) { start = now; t = 0; }
+      drawScene(octx, Math.min(t, DURATION));
+      requestAnimationFrame(loop);
+    })(start);
+  }
+}
+</script>
+</body>
+</html>
