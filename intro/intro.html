@@ -12,15 +12,16 @@
 <canvas id="c" width="1080" height="1920"></canvas>
 <script>
 // UpperGrades ribbon intro — portrait 1080x1920, 60fps, 2.5s.
-// Geometry is traced from the logo PNG in index.html (160x115 coordinate space).
+// Geometry is traced from the UG logo artwork (1448x1086 pixel coordinate space).
 const W = 1080, H = 1920, FPS = 60, DURATION = 2.5;
 const FRAMES = Math.round(FPS * DURATION);
-const SCALE = 4.8;                 // logo units -> pixels
-const CX = 79, CY = 57;            // logo centre in logo units
-const RIBBON_W = 21.5;             // ribbon width in logo units
+const SCALE = 0.62;                // logo units -> pixels
+const CX = 751, CY = 516;          // logo centre in logo units
+const RIBBON_W = 169;              // ribbon width in logo units
+const GAP = 11;                    // dark gap cut around the U where it crosses the G
 
-const TEAL = '#53A7B2', TEAL_DARK = '#24616C';
-const ORANGE = '#F5911F', ORANGE_DARK = '#9A5C0E';
+const BLUE = '#1C9FF7';
+const ORANGE = '#C77139';
 
 // ---- path building -------------------------------------------------------
 const P = (x, y) => ({ x, y });
@@ -28,6 +29,10 @@ function line(a, b) { return t => P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t
 function arc(c, r, a0, a1) {
   const d = Math.PI / 180;
   return t => { const a = (a0 + (a1 - a0) * t) * d; return P(c.x + r * Math.cos(a), c.y + r * Math.sin(a)); };
+}
+function ellipse(c, rx, ry, a0, a1) {
+  const d = Math.PI / 180;
+  return t => { const a = (a0 + (a1 - a0) * t) * d; return P(c.x + rx * Math.cos(a), c.y + ry * Math.sin(a)); };
 }
 function cubic(p0, p1, p2, p3) {
   return t => {
@@ -66,11 +71,11 @@ function at(path, s) {
 // Ribbon = [offscreen run-up] + leadIn + logo + leadOut + [offscreen run-out].
 // The visible ribbon is always exactly as long as the logo segment, so it
 // slides along the track: in from off-screen, rests on the logo, then away.
-function makeRibbon({ leadIn, logo, leadOut, color, dark, shade, arrow }) {
+function makeRibbon({ leadIn, logo, leadOut, color, arrow, cutout }) {
   const logoLen = lengthOf(logo);
   const tmp = buildPath([...leadIn, ...logo, ...leadOut]);
   const first = at(tmp, 0.01), last = at(tmp, tmp.total - 0.01);
-  const ext = logoLen + 120;
+  const ext = logoLen + 1000;
   const runUp = line(P(tmp.pts[0].x - first.tx * ext, tmp.pts[0].y - first.ty * ext), tmp.pts[0]);
   const end = tmp.pts[tmp.pts.length - 1];
   const runOut = line(end, P(end.x + last.tx * ext, end.y + last.ty * ext));
@@ -78,38 +83,38 @@ function makeRibbon({ leadIn, logo, leadOut, color, dark, shade, arrow }) {
   const sStart = ext;                               // head at start of leadIn
   const sRest = ext + lengthOf(leadIn) + logoLen;   // head at end of logo
   const sEnd = path.total;                          // tail at end of track
-  return { path, logoLen, sStart, sRest, sEnd, color, dark, shade, arrow };
+  return { path, logoLen, sStart, sRest, sEnd, color, arrow, cutout };
 }
 
 // ---- the two ribbons (logo units) -----------------------------------------
-const tealLogo = [
-  line(P(16, 6), P(16, 69)),                 // U left stem
-  arc(P(43, 69), 27, 180, 0),                // U bottom
-  line(P(70, 69), P(70, 58)),                // U right stem
-  arc(P(110, 58), 40, 180, 308),             // G top arc
-];
-const tealEnd = arc(P(110, 58), 40, 180, 308)(1);
+const gTop = arc(P(930, 490), 278, 180, 315);
+const tealEnd = gTop(1), tEnd = 315 * Math.PI / 180;
 const teal = makeRibbon({
-  leadIn: [cubic(P(-150, -190), P(-40, -230), P(16, -130), P(16, 6))],
-  logo: tealLogo,
-  leadOut: [cubic(tealEnd, P(tealEnd.x + 22, tealEnd.y + 22), P(205, 30), P(300, -150))],
-  color: TEAL, dark: TEAL_DARK,
-  // dark edge bands as [startRel, peakRel, endRel, strength] measured from logo start
-  shade: [[30, 95, 150, 0.9], [140, 162, 195, 0.7]],
+  leadIn: [cubic(P(-700, -1300), P(-200, -1350), P(232.5, -800), P(232.5, 128))],
+  logo: [
+    line(P(232.5, 128), P(232.5, 615)),        // U left stem
+    arc(P(441.25, 615), 208.75, 180, 0),       // U bottom
+    line(P(650, 615), P(650, 490)),            // U right stem
+    gTop,                                      // G top arc
+  ],
+  leadOut: [cubic(tealEnd,
+    P(tealEnd.x - Math.sin(tEnd) * 200, tealEnd.y + Math.cos(tEnd) * 200),
+    P(1650, 350), P(2300, -1000))],
+  color: BLUE,
   arrow: false,
+  cutout: true,
 });
 
-const orangeLogo = [
-  arc(P(100.6, 67), 30.4, 180, 0),           // G bottom bowl (starts tucked under the U)
-  line(P(131, 67), P(131, 64)),              // G right stem up to arrow
-];
 const orange = makeRibbon({
-  leadIn: [cubic(P(-110, 330), P(-60, 120), P(70.2, -40), P(70.2, 67))],
-  logo: orangeLogo,
-  leadOut: [line(P(131, 64), P(131, -260))],
-  color: ORANGE, dark: ORANGE_DARK,
-  shade: [[-10, 20, 60, 1.0]],
-  arrow: { len: 25, half: 20.5 },
+  leadIn: [cubic(P(-600, 2400), P(-300, 1300), P(666, -200), P(666, 594))],
+  logo: [
+    ellipse(P(912, 594), 246, 225, 180, 0),    // G bottom bowl (starts tucked under the U)
+    line(P(1158, 594), P(1158, 577)),          // G right stem up to arrow
+  ],
+  leadOut: [line(P(1158, 577), P(1158, -1900))],
+  color: ORANGE,
+  arrow: { len: 200, half: 194.5 },
+  cutout: false,
 });
 
 // ---- timing ---------------------------------------------------------------
@@ -133,88 +138,56 @@ function headPos(r, t, delay) {
 // ---- drawing --------------------------------------------------------------
 const toPx = p => P((p.x - CX) * SCALE + W / 2, (p.y - CY) * SCALE + H / 2);
 
-function smoothBump(a, p, b, x) {
-  if (x <= a || x >= b) return 0;
-  const k = x < p ? (x - a) / (p - a) : (b - x) / (b - p);
-  return k * k * (3 - 2 * k);
-}
-
-function drawRibbon(ctx, r, head) {
+function ribbonPath(ctx, r, head) {
   const tail = head - r.logoLen;
   const s0 = Math.max(0, tail), s1 = Math.min(r.path.total, head);
-  if (s1 <= s0) return;
-  const step = 0.4;
-
-  // base stroke
-  ctx.save();
-  ctx.lineWidth = RIBBON_W * SCALE;
-  ctx.lineCap = 'butt';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = r.color;
+  if (s1 <= s0) return false;
+  const step = 2;
   ctx.beginPath();
   for (let s = s0; ; s += step) {
     const q = toPx(at(r.path, Math.min(s, s1)));
     if (s === s0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
     if (s >= s1) break;
   }
-  ctx.stroke();
+  return true;
+}
 
+function drawRibbon(ctx, r, head) {
+  ctx.save();
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'round';
+  if (r.cutout && ribbonPath(ctx, r, head)) {
+    // erase a thin margin around this ribbon so it reads as passing over the other one
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = (RIBBON_W + GAP * 2) * SCALE;
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (ribbonPath(ctx, r, head)) {
+    ctx.lineWidth = RIBBON_W * SCALE;
+    ctx.strokeStyle = r.color;
+    ctx.stroke();
+  }
   // arrowhead riding on the head of the ribbon
-  if (r.arrow) {
+  if (r.arrow && head > 0) {
     const h = at(r.path, head), nx = -h.ty, ny = h.tx;
     const a = toPx(P(h.x + nx * r.arrow.half, h.y + ny * r.arrow.half));
     const b = toPx(P(h.x - nx * r.arrow.half, h.y - ny * r.arrow.half));
     const tip = toPx(P(h.x + h.tx * r.arrow.len, h.y + h.ty * r.arrow.len));
-    const back = toPx(P(h.x - h.tx * 0.6, h.y - h.ty * 0.6));
+    const back = toPx(P(h.x - h.tx * 4, h.y - h.ty * 4));
     ctx.fillStyle = r.color;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y); ctx.lineTo(tip.x, tip.y); ctx.lineTo(b.x, b.y);
     ctx.lineTo(back.x, back.y); ctx.closePath(); ctx.fill();
   }
-
-  ctx.restore();
-
-  // shading: soft dark band along one edge, travelling with the ribbon.
-  // Dabs go on their own canvas, blurred once, then painted atop the ribbon.
-  shadeCtx.clearRect(0, 0, W, H);
-  shadeCtx.fillStyle = r.dark;
-  for (const [a, p, b, strength] of r.shade) {
-    for (let rel = a; rel <= b; rel += 0.8) {
-      const s = tail + rel;
-      if (s < s0 || s > s1) continue;
-      const w = smoothBump(a, p, b, rel) * strength;
-      if (w <= 0) continue;
-      const q = at(r.path, s), nx = -q.ty, ny = q.tx;
-      const edge = RIBBON_W / 2;
-      const c = toPx(P(q.x + nx * edge, q.y + ny * edge));
-      shadeCtx.beginPath();
-      shadeCtx.arc(c.x, c.y, w * RIBBON_W * 0.55 * SCALE, 0, Math.PI * 2);
-      shadeCtx.fill();
-    }
-  }
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-atop';
-  ctx.filter = `blur(${(2.2 * SCALE).toFixed(1)}px)`;
-  ctx.drawImage(shade, 0, 0);
   ctx.restore();
 }
 
-const shade = document.createElement('canvas');
-shade.width = W; shade.height = H;
-const shadeCtx = shade.getContext('2d');
-
-const layer = document.createElement('canvas');
-layer.width = W; layer.height = H;
-const lctx = layer.getContext('2d');
-
 function drawScene(ctx, t) {
   ctx.clearRect(0, 0, W, H);
-  // orange underneath, teal on top (the U passes over the G bowl)
-  for (const [r, delay] of [[orange, 0.07], [teal, 0]]) {
-    lctx.clearRect(0, 0, W, H);
-    drawRibbon(lctx, r, headPos(r, t, delay));
-    ctx.drawImage(layer, 0, 0);
-  }
+  // orange underneath, blue on top (the U passes over the G bowl)
+  drawRibbon(ctx, orange, headPos(orange, t, 0.07));
+  drawRibbon(ctx, teal, headPos(teal, t, 0));
 }
 
 // Motion-blurred frame: average several sub-frame renders (180° shutter),
